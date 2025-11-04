@@ -6,13 +6,20 @@ import { searchImages } from '@/utils/unsplash'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-function generateSlug(title: string): string {
-  return title
+function generateSlug(categoryName: string, timestamp?: number): string {
+  // 카테고리명을 영문으로 변환 (한글 제거)
+  const categorySlug = categoryName
     .toLowerCase()
-    .replace(/[^a-z0-9가-힣\s-]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '') // 한글 제거, 영문/숫자만 허용
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
-    .trim()
+    .trim() || 'post'
+
+  // 타임스탬프 또는 현재 시간 사용
+  const time = timestamp || Date.now()
+
+  // 고유한 영문 slug 생성: category-timestamp
+  return `${categorySlug}-${time}`
 }
 
 export async function GET(request: NextRequest) {
@@ -60,22 +67,8 @@ export async function GET(request: NextRequest) {
     console.log(`Searching images with keywords: ${generatedContent.image_keywords.join(', ')}`)
     const images = await searchImages(generatedContent.image_keywords, 3)
 
-    // 6. Slug 생성 (중복 확인)
-    let slug = generateSlug(generatedContent.title)
-    let slugCounter = 1
-
-    while (true) {
-      const { data: existingPost } = await supabase
-        .from('posts')
-        .select('id')
-        .eq('slug', slug)
-        .single()
-
-      if (!existingPost) break
-
-      slug = `${generateSlug(generatedContent.title)}-${slugCounter}`
-      slugCounter++
-    }
+    // 6. Slug 생성 (타임스탬프 기반으로 고유성 보장)
+    const slug = generateSlug(randomCategory.slug || randomCategory.name)
 
     // 7. 포스트 저장
     const { data: post, error: postError } = await supabase
