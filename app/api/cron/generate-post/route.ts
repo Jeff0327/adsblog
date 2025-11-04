@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/utils/supabase/server'
+import { createServiceClient } from '@/utils/supabase/service'
 import { generateBlogPost } from '@/utils/gemini'
 import { searchImages } from '@/utils/unsplash'
 
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const supabase = await createClient()
+    const supabase = createServiceClient()
 
     // 1. 랜덤 카테고리 선택
     const { data: categories } = await supabase
