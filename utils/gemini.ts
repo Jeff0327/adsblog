@@ -8,7 +8,7 @@ export async function generateBlogPost(
   category: string,
   keywords: string[]
 ): Promise<GeminiGeneratedContent> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const prompt = `
 You are a professional blog writer. Write a comprehensive, engaging blog post in Korean about "${topic}" for the "${category}" category.
