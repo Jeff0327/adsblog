@@ -6,6 +6,8 @@ import { searchImages } from '@/utils/unsplash'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+const BLOG_KEY = process.env.BLOG_KEY || 'default'
+
 function generateSlug(categoryName: string, timestamp?: number): string {
   // 카테고리명을 영문으로 변환 (한글 제거)
   const categorySlug = categoryName
@@ -32,36 +34,64 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServiceClient()
 
-    // 1. 랜덤 카테고리 선택
+    // 0. 블로그 설정 가져오기 (마케팅 정보 포함)
+    const { data: blogSettings, error: settingsError } = await supabase
+      .from('blog_settings')
+      .select('*')
+      .eq('blog_key', BLOG_KEY)
+      .single()
+
+    if (settingsError || !blogSettings) {
+      console.error('Blog settings not found for BLOG_KEY:', BLOG_KEY)
+      return NextResponse.json({ error: `Blog settings not found for key: ${BLOG_KEY}` }, { status: 400 })
+    }
+
+    // 1. 현재 블로그의 랜덤 카테고리 선택
     const { data: categories } = await supabase
       .from('categories')
       .select('*')
+      .eq('blog_key', BLOG_KEY)
       .order('order_index', { ascending: true })
 
     if (!categories || categories.length === 0) {
-      return NextResponse.json({ error: 'No categories found' }, { status: 400 })
+      return NextResponse.json({ error: `No categories found for blog: ${BLOG_KEY}` }, { status: 400 })
     }
 
     const randomCategory = categories[Math.floor(Math.random() * categories.length)]
 
-    // 2. 해당 카테고리의 SEO 키워드 가져오기
+    // 2. 해당 블로그 + 카테고리의 SEO 키워드 가져오기
     const { data: seoKeywords } = await supabase
       .from('seo_keywords')
       .select('keyword')
+      .eq('blog_key', BLOG_KEY)
       .or(`category_id.eq.${randomCategory.id},is_global.eq.true`)
 
     const keywords = seoKeywords?.map((k) => k.keyword) || []
 
-    // 키워드가 없으면 기본 키워드 사용
-    const finalKeywords = keywords.length > 0 ? keywords : ['blog', 'article', 'content']
+    // target_keywords가 있으면 추가
+    const allKeywords = [
+      ...keywords,
+      ...(blogSettings.target_keywords || []),
+    ]
+    const finalKeywords = allKeywords.length > 0 ? allKeywords : ['blog', 'article', 'content']
 
     // 3. 주제 생성 (카테고리 + 키워드 조합)
     const randomKeyword = finalKeywords[Math.floor(Math.random() * finalKeywords.length)]
     const topic = `${randomCategory.name} - ${randomKeyword}`
 
-    // 4. Gemini로 블로그 글 생성
-    console.log(`Generating blog post for topic: ${topic}`)
-    const generatedContent = await generateBlogPost(topic, randomCategory.name, finalKeywords)
+    // 4. Gemini로 블로그 글 생성 (마케팅 정보 포함)
+    console.log(`Generating blog post for blog: ${BLOG_KEY}, topic: ${topic}`)
+    const generatedContent = await generateBlogPost(
+      topic,
+      randomCategory.name,
+      finalKeywords,
+      {
+        businessName: blogSettings.business_name,
+        businessType: blogSettings.business_type,
+        marketingGoal: blogSettings.marketing_goal,
+        contentStyle: blogSettings.content_style,
+      }
+    )
 
     // 5. Unsplash에서 이미지 검색
     console.log(`Searching images with keywords: ${generatedContent.image_keywords.join(', ')}`)

@@ -2,6 +2,7 @@
 
 export interface BlogSettings {
   id: string
+  blog_key: string
   site_title: string
   site_description: string | null
   site_url: string | null
@@ -11,12 +12,18 @@ export interface BlogSettings {
   adsense_client_id: string | null
   adsense_sidebar_slot: string | null
   adsense_in_article_slot: string | null
+  business_name: string | null
+  business_type: string | null
+  marketing_goal: string | null
+  target_keywords: string[] | null
+  content_style: string | null
   created_at: string
   updated_at: string
 }
 
 export interface Category {
   id: string
+  blog_key: string
   name: string
   slug: string
   description: string | null
@@ -27,6 +34,7 @@ export interface Category {
 
 export interface SeoKeyword {
   id: string
+  blog_key: string
   keyword: string
   category_id: string | null
   is_global: boolean

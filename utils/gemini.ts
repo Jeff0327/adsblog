@@ -3,18 +3,48 @@ import { GeminiGeneratedContent } from '@/types'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 
+interface MarketingContext {
+  businessName?: string | null
+  businessType?: string | null
+  marketingGoal?: string | null
+  contentStyle?: string | null
+}
+
 export async function generateBlogPost(
   topic: string,
   category: string,
-  keywords: string[]
+  keywords: string[],
+  marketingContext?: MarketingContext
 ): Promise<GeminiGeneratedContent> {
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
+  // 마케팅 컨텍스트 구성
+  const marketingInfo = marketingContext?.businessName
+    ? `
+## Marketing Context
+- Business: ${marketingContext.businessName}${marketingContext.businessType ? ` (${marketingContext.businessType})` : ''}
+- Marketing Goal: ${marketingContext.marketingGoal || '브랜드 인지도 향상 및 고객 유치'}
+- Content Style: ${marketingContext.contentStyle || '전문적이고 신뢰감 있는 톤'}
+
+⚠️ IMPORTANT Marketing Guidelines:
+1. Title must hook readers with one of these techniques:
+   - Use numbers (예: "이 3가지만 알면...", "5분만에 해결하는...")
+   - Emphasize benefits/merits (예: "비용 절감하는...", "효과 2배 높이는...")
+   - Show differentiation (예: "다른 곳과 다른 우리만의...", "차별화된...")
+   - Present problem-solving (예: "○○ 고민 해결...", "부작용 없이...")
+
+2. Content must naturally mention "${marketingContext.businessName}" in a helpful, non-promotional way
+3. Focus on providing genuine value while subtly highlighting why readers should consider "${marketingContext.businessName}"
+4. DO NOT make it sound like an advertisement - maintain editorial integrity
+5. Weave in the business naturally when discussing solutions or examples
+`
+    : ''
+
   const prompt = `
 You are a professional blog writer. Write a comprehensive, engaging blog post in Korean about "${topic}" for the "${category}" category.
-
+${marketingInfo}
 Requirements:
-1. Create an SEO-optimized title (max 60 characters)
+1. Create an SEO-optimized, attention-grabbing title (max 60 characters) - MUST use hooking techniques above
 2. Write a compelling excerpt/summary (max 160 characters)
 3. Write the main content (approximately 800-1200 Korean characters) in HTML format with proper headings, paragraphs, lists, and formatting
 4. Include SEO title (can be different from main title, optimized for search)

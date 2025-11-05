@@ -3,14 +3,17 @@
 import { createClient } from '@/utils/supabase/server'
 import { PostWithCategory, BlogSettings } from '@/types'
 
+const BLOG_KEY = process.env.BLOG_KEY || 'default'
+
 export async function getBlogSettings(): Promise<BlogSettings | null> {
   try {
     const supabase = await createClient()
 
-    // maybeSingle()은 0개 또는 1개의 결과를 허용 (에러 없이 null 반환)
+    // blog_key로 해당 블로그의 설정만 조회
     const { data, error } = await supabase
       .from('blog_settings')
       .select('*')
+      .eq('blog_key', BLOG_KEY)
       .maybeSingle()
 
     if (error) {
@@ -50,6 +53,7 @@ export async function getPosts(
       .from('categories')
       .select('id')
       .eq('slug', categorySlug)
+      .eq('blog_key', BLOG_KEY)
       .single()
 
     if (category) {
@@ -79,6 +83,7 @@ export async function getCategories() {
   const { data, error } = await supabase
     .from('categories')
     .select('*')
+    .eq('blog_key', BLOG_KEY)
     .order('order_index', { ascending: true })
 
   if (error) {
