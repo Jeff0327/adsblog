@@ -8,25 +8,55 @@ export const runtime = 'nodejs'
 
 const BLOG_KEY = process.env.BLOG_KEY || 'default'
 
-function generateSlug(categoryName: string, timestamp?: number): string {
-  // 카테고리명을 영문으로 변환 (한글 제거)
-  const categorySlug = categoryName
+/**
+ * 영문 slug 생성 (한글 제거, 타임스탬프 추가)
+ */
+function generateSlug(baseText: string, timestamp?: number): string {
+  const cleanText = baseText
     .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '') // 한글 제거, 영문/숫자만 허용
+    .replace(/[^a-z0-9\s-]/g, '') // 한글, 특수문자 제거
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .trim() || 'post'
 
-  // 타임스탬프 또는 현재 시간 사용
   const time = timestamp || Date.now()
+  return `${cleanText}-${time}`
+}
 
-  // 고유한 영문 slug 생성: category-timestamp
-  return `${categorySlug}-${time}`
+/**
+ * 주제 생성 함수
+ */
+function generateTopic(
+  industry: string | null,
+  keywords: string[],
+  brandInfo: {
+    targetAudience?: string
+    [key: string]: unknown
+  } | null
+): string {
+  if (keywords.length === 0) {
+    keywords = ['블로그', '콘텐츠', '정보']
+  }
+
+  const randomKeyword = keywords[Math.floor(Math.random() * keywords.length)]
+
+  // 타겟 고객이 있으면 활용
+  if (brandInfo?.targetAudience) {
+    return `${brandInfo.targetAudience}를 위한 ${randomKeyword}`
+  }
+
+  // 산업 분야가 있으면 활용
+  if (industry) {
+    return `${industry} 분야의 ${randomKeyword}`
+  }
+
+  // 기본
+  return randomKeyword
 }
 
 export async function GET(request: NextRequest) {
   try {
-    // Vercel Cron Secret 검증 (선택사항)
+    // 1. Cron Secret 검증
     const authHeader = request.headers.get('authorization')
     if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -34,7 +64,7 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServiceClient()
 
-    // 0. 블로그 설정 가져오기 (마케팅 정보 포함)
+    // 2. 블로그 설정 가져오기
     const { data: blogSettings, error: settingsError } = await supabase
       .from('blog_settings')
       .select('*')
@@ -43,102 +73,110 @@ export async function GET(request: NextRequest) {
 
     if (settingsError || !blogSettings) {
       console.error('Blog settings not found for BLOG_KEY:', BLOG_KEY)
-      return NextResponse.json({ error: `Blog settings not found for key: ${BLOG_KEY}` }, { status: 400 })
+      return NextResponse.json(
+        { error: `Blog settings not found for key: ${BLOG_KEY}` },
+        { status: 400 }
+      )
     }
 
-    // 1. 현재 블로그의 랜덤 카테고리 선택
-    const { data: categories } = await supabase
-      .from('categories')
-      .select('*')
-      .eq('blog_key', BLOG_KEY)
-      .order('order_index', { ascending: true })
-
-    if (!categories || categories.length === 0) {
-      return NextResponse.json({ error: `No categories found for blog: ${BLOG_KEY}` }, { status: 400 })
+    // 3. 자동 포스팅이 활성화되어 있는지 확인
+    if (!blogSettings.postingEnabled) {
+      return NextResponse.json({
+        success: false,
+        message: 'Auto-posting is disabled for this blog',
+      })
     }
 
-    const randomCategory = categories[Math.floor(Math.random() * categories.length)]
+    // 4. 키워드 준비
+    const keywords = blogSettings.keywords || ['블로그', '정보', '가이드']
 
-    // 2. 해당 블로그 + 카테고리의 SEO 키워드 가져오기
-    const { data: seoKeywords } = await supabase
-      .from('seo_keywords')
-      .select('keyword')
-      .eq('blog_key', BLOG_KEY)
-      .or(`category_id.eq.${randomCategory.id},is_global.eq.true`)
+    // 5. 주제 생성
+    const topic = generateTopic(
+      blogSettings.industry,
+      keywords as string[],
+      blogSettings.brandInfo as { targetAudience?: string; [key: string]: unknown } | null
+    )
 
-    const keywords = seoKeywords?.map((k) => k.keyword) || []
+    console.log(`[${BLOG_KEY}] Generating post for topic: "${topic}"`)
 
-    // target_keywords가 있으면 추가
-    const allKeywords = [
-      ...keywords,
-      ...(blogSettings.target_keywords || []),
-    ]
-    const finalKeywords = allKeywords.length > 0 ? allKeywords : ['blog', 'article', 'content']
-
-    // 3. 주제 생성 (카테고리 + 키워드 조합)
-    const randomKeyword = finalKeywords[Math.floor(Math.random() * finalKeywords.length)]
-    const topic = `${randomCategory.name} - ${randomKeyword}`
-
-    // 4. Gemini로 블로그 글 생성 (마케팅 정보 포함)
-    console.log(`Generating blog post for blog: ${BLOG_KEY}, topic: ${topic}`)
+    // 6. Gemini로 블로그 글 생성
     const generatedContent = await generateBlogPost(
       topic,
-      randomCategory.name,
-      finalKeywords,
+      keywords as string[],
       {
-        businessName: blogSettings.business_name,
-        businessType: blogSettings.business_type,
-        marketingGoal: blogSettings.marketing_goal,
+        businessName: blogSettings.businessName,
+        businessDescription: blogSettings.businessDescription,
+        promotionGoal: blogSettings.promotionGoal,
         contentStyle: blogSettings.content_style,
+        industry: blogSettings.industry,
+        brandInfo: blogSettings.brandInfo as {
+          brandName?: string
+          coreValues?: string[]
+          targetAudience?: string
+          uniqueSellingPoints?: string[]
+          brandVoice?: string
+        } | null,
+        promptSettings: blogSettings.promptSettings as {
+          contentPrompt?: string
+          seoPrompt?: string
+          model?: string
+          temperature?: number
+          maxTokens?: number
+        } | null,
       }
     )
 
-    // 5. Unsplash에서 이미지 검색
-    console.log(`Searching images with keywords: ${generatedContent.image_keywords.join(', ')}`)
-    const images = await searchImages(generatedContent.image_keywords, 3)
+    console.log(`[${BLOG_KEY}] Content generated: "${generatedContent.title}"`)
+    console.log(`[${BLOG_KEY}] Tags: ${generatedContent.tags.join(', ')}`)
 
-    // 6. Slug 생성 (타임스탬프 기반으로 고유성 보장)
-    const slug = generateSlug(randomCategory.slug || randomCategory.name)
+    // 7. Unsplash에서 이미지 검색
+    const imagesPerPost = blogSettings.imagesPerPost || 3
+    console.log(
+      `[${BLOG_KEY}] Searching images with keywords: ${generatedContent.image_keywords.join(', ')}`
+    )
 
-    // 7. 포스트 저장
+    const images = await searchImages(generatedContent.image_keywords, imagesPerPost)
+    const imageUrls = images.map((img) => img.urls.regular)
+
+    console.log(`[${BLOG_KEY}] Found ${imageUrls.length} images`)
+
+    // 8. Slug 생성 (타임스탬프 기반 고유성 보장)
+    const slug = generateSlug(generatedContent.title)
+
+    // 9. 포스트 저장 (새 스키마)
     const { data: post, error: postError } = await supabase
       .from('posts')
       .insert({
+        blog_key: BLOG_KEY,
         title: generatedContent.title,
         slug,
         content: generatedContent.content,
         excerpt: generatedContent.excerpt,
-        category_id: randomCategory.id,
+        tags: generatedContent.tags,
+        images: imageUrls, // 이미지 URL 배열
         seo_title: generatedContent.seo_title,
         seo_description: generatedContent.seo_description,
         seo_keywords: generatedContent.seo_keywords,
-        og_image: images.length > 0 ? images[0].urls.regular : null,
-        published: true,
-        published_at: new Date().toISOString(),
+        og_image: imageUrls.length > 0 ? imageUrls[0] : null,
       })
       .select()
       .single()
 
     if (postError) {
-      console.error('Error creating post:', postError)
-      return NextResponse.json({ error: 'Failed to create post', details: postError }, { status: 500 })
+      console.error(`[${BLOG_KEY}] Error creating post:`, postError)
+      return NextResponse.json(
+        { error: 'Failed to create post', details: postError },
+        { status: 500 }
+      )
     }
 
-    // 8. 이미지 저장
-    if (images.length > 0 && post) {
-      const imageInserts = images.map((image, index) => ({
-        post_id: post.id,
-        image_url: image.urls.regular,
-        alt_text: image.alt_description || generatedContent.title,
-        order_index: index,
-      }))
+    // 10. lastPostedAt 업데이트
+    await supabase
+      .from('blog_settings')
+      .update({ lastPostedAt: new Date().toISOString() })
+      .eq('blog_key', BLOG_KEY)
 
-      const { error: imagesError } = await supabase.from('post_images').insert(imageInserts)
-
-      if (imagesError) {
-        console.error('Error saving images:', imagesError)
-      }
-    }
+    console.log(`[${BLOG_KEY}] Post created successfully: ${post.id}`)
 
     return NextResponse.json({
       success: true,
@@ -146,14 +184,18 @@ export async function GET(request: NextRequest) {
         id: post.id,
         title: post.title,
         slug: post.slug,
-        category: randomCategory.name,
-        images_count: images.length,
+        tags: post.tags,
+        images_count: imageUrls.length,
+        url: `${process.env.NEXT_PUBLIC_SITE_URL || ''}/post/${post.slug}`,
       },
     })
   } catch (error) {
-    console.error('Error in generate-post cron:', error)
+    console.error('[generate-post] Error:', error)
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      {
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     )
   }

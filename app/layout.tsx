@@ -21,12 +21,11 @@ export async function generateMetadata(): Promise<Metadata> {
       title: settings?.site_title || "Blog",
       description: settings?.site_description || "A modern blog platform",
       icons: {
-        icon: settings?.favicon_url || "/favicon.ico",
+        icon: "/favicon.ico",
       },
       openGraph: {
         title: settings?.site_title || "Blog",
         description: settings?.site_description || "A modern blog platform",
-        images: settings?.default_og_image ? [settings.default_og_image] : [],
       },
     }
   } catch (error) {

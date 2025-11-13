@@ -1,62 +1,94 @@
-// Supabase Database Types
+// Supabase Database Types - DB 스키마와 완전히 일치
 
 export interface BlogSettings {
   id: string
   blog_key: string
+  userId: string | null
+
+  // 사이트 기본 정보
   site_title: string
   site_description: string | null
   site_url: string | null
-  default_og_image: string | null
-  favicon_url: string | null
-  adsense_enabled: boolean
+  keywords: string[] | null
+
+  // AdSense
+  adsense_enabled: boolean | null
   adsense_client_id: string | null
-  adsense_sidebar_slot: string | null
-  adsense_in_article_slot: string | null
-  business_name: string | null
-  business_type: string | null
-  marketing_goal: string | null
-  target_keywords: string[] | null
+
+  // 콘텐츠 스타일
   content_style: string | null
-  created_at: string
-  updated_at: string
-}
 
-export interface Category {
-  id: string
-  blog_key: string
-  name: string
-  slug: string
-  description: string | null
-  order_index: number
-  created_at: string
-  updated_at: string
-}
+  // 상태
+  is_public: boolean | null
+  isActive: boolean | null
 
-export interface SeoKeyword {
-  id: string
-  blog_key: string
-  keyword: string
-  category_id: string | null
-  is_global: boolean
-  created_at: string
+  // 비즈니스 정보
+  businessName: string | null
+  businessDescription: string | null
+  promotionGoal: string | null
+  productInfo: Record<string, unknown> | null
+
+  // 자동 포스팅 설정
+  postsPerDay: number | null
+  imagesPerPost: number | null
+  postingEnabled: boolean | null
+  lastPostedAt: string | null
+
+  // 마케팅 & 브랜딩
+  industry: string | null
+  brandInfo: {
+    brandName?: string
+    coreValues?: string[]
+    targetAudience?: string
+    uniqueSellingPoints?: string[]
+    brandVoice?: string
+  } | null
+
+  // AI 프롬프트 설정
+  promptSettings: {
+    contentPrompt?: string
+    seoPrompt?: string
+    model?: string
+    temperature?: number
+    maxTokens?: number
+  } | null
+
+  // 타임스탬프
+  created_at: string | null
+  updated_at: string | null
 }
 
 export interface Post {
   id: string
+  blog_key: string
+  authorId: string | null
+
+  // 기본 정보
   title: string
   slug: string
-  content: string
+  content: string | null
   excerpt: string | null
-  category_id: string | null
+
+  // 콘텐츠 형식
+  richContent: Record<string, unknown> | null
+  contentFormat: string | null
+
+  // 이미지 & 태그
+  images: string[] | null
+  tags: string[] | null
+
+  // SEO
   seo_title: string | null
   seo_description: string | null
   seo_keywords: string[] | null
   og_image: string | null
-  published: boolean
-  published_at: string | null
-  view_count: number
-  created_at: string
-  updated_at: string
+
+  // 상태
+  view_count: number | null
+
+  // 타임스탬프
+  created_at: string | null
+  updated_at: string | null
 }
 
 export interface PostImage {
@@ -68,16 +100,16 @@ export interface PostImage {
   created_at: string
 }
 
-// Join Types
+// Join Types (호환성을 위해 유지)
 export interface PostWithCategory extends Post {
-  category: Category | null
+  category: null
 }
 
 export interface PostWithImages extends Post {
-  images: PostImage[]
+  images_data?: PostImage[]
 }
 
 export interface PostWithAll extends Post {
-  category: Category | null
-  images: PostImage[]
+  category: null
+  images_data?: PostImage[]
 }

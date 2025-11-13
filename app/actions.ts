@@ -36,30 +36,12 @@ export async function getPosts(
 ): Promise<{ posts: PostWithCategory[]; total: number }> {
   const supabase = await createClient()
 
+  // 카테고리 제거: 카테고리 없이 posts만 조회
   let query = supabase
     .from('posts')
-    .select(
-      `
-      *,
-      category:categories(*)
-    `,
-      { count: 'exact' }
-    )
-    .eq('published', true)
-    .order('published_at', { ascending: false })
-
-  if (categorySlug) {
-    const { data: category } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('slug', categorySlug)
-      .eq('blog_key', BLOG_KEY)
-      .single()
-
-    if (category) {
-      query = query.eq('category_id', category.id)
-    }
-  }
+    .select('*', { count: 'exact' })
+    .eq('blog_key', BLOG_KEY)
+    .order('created_at', { ascending: false })
 
   const from = (page - 1) * limit
   const to = from + limit - 1
@@ -71,25 +53,14 @@ export async function getPosts(
     return { posts: [], total: 0 }
   }
 
+  // category를 null로 설정하여 타입 호환
+  const postsWithCategory = (data || []).map(post => ({
+    ...post,
+    category: null
+  }))
+
   return {
-    posts: (data || []) as PostWithCategory[],
+    posts: postsWithCategory as PostWithCategory[],
     total: count || 0,
   }
-}
-
-export async function getCategories() {
-  const supabase = await createClient()
-
-  const { data, error } = await supabase
-    .from('categories')
-    .select('*')
-    .eq('blog_key', BLOG_KEY)
-    .order('order_index', { ascending: true })
-
-  if (error) {
-    console.error('Error fetching categories:', error)
-    return []
-  }
-
-  return data
 }

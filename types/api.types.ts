@@ -20,6 +20,7 @@ export interface GeminiGeneratedContent {
   title: string
   content: string
   excerpt: string
+  tags: string[]
   seo_title: string
   seo_description: string
   seo_keywords: string[]
