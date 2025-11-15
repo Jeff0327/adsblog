@@ -46,11 +46,13 @@ export interface BlogSettings {
 
   // AI 프롬프트 설정
   promptSettings: {
-    contentPrompt?: string
-    seoPrompt?: string
-    model?: string
-    temperature?: number
-    maxTokens?: number
+    provider?: 'openai' | 'gemini' | 'claude' // AI 제공자
+    apiKey?: string                            // API 키 (DB 저장)
+    model?: string                             // 모델명
+    contentPrompt?: string                     // 커스텀 프롬프트
+    seoPrompt?: string                         // SEO 프롬프트
+    temperature?: number                       // 0.0 ~ 1.0
+    maxTokens?: number                         // 최대 토큰
   } | null
 
   // 타임스탬프

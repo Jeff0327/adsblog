@@ -80,7 +80,6 @@ export async function getRecentPosts(limit: number = 10): Promise<Post[]> {
     .limit(limit)
 
   if (error) {
-    console.error('Error fetching recent posts:', error)
     return []
   }
 

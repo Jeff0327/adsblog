@@ -1,7 +1,7 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import { GeminiGeneratedContent } from '@/types'
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
+import { GoogleGenerativeAI } from '@google/generative-ai'
+import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 
 interface MarketingContext {
   businessName?: string | null
@@ -17,23 +17,24 @@ interface MarketingContext {
     brandVoice?: string
   } | null
   promptSettings?: {
+    provider?: 'openai' | 'gemini' | 'claude'
+    apiKey?: string
+    model?: string
     contentPrompt?: string
     seoPrompt?: string
-    model?: string
     temperature?: number
     maxTokens?: number
   } | null
 }
 
-export async function generateBlogPost(
+/**
+ * 프롬프트 생성 (모든 AI 제공자 공통)
+ */
+function createPrompt(
   topic: string,
   keywords: string[],
   marketingContext?: MarketingContext
-): Promise<GeminiGeneratedContent> {
-  // 모델 선택 (promptSettings에서 커스텀 가능)
-  const modelName = marketingContext?.promptSettings?.model || 'gemini-2.5-flash'
-  const model = genAI.getGenerativeModel({ model: modelName })
-
+): string {
   // 마케팅 컨텍스트 구성
   const marketingInfo = marketingContext?.businessName
     ? `
@@ -62,7 +63,7 @@ ${marketingContext.brandInfo?.uniqueSellingPoints?.length ? `- 차별점: ${mark
   // 커스텀 프롬프트 (promptSettings에서)
   const customPrompt = marketingContext?.promptSettings?.contentPrompt || ''
 
-  const prompt = `
+  return `
 당신은 전문 블로그 작가입니다. 한국어로 "${topic}"에 대한 포괄적이고 매력적인 블로그 포스트를 작성하세요.
 
 ${marketingInfo}
@@ -100,30 +101,133 @@ ${customPrompt}
 - 실용적인 예시와 실행 가능한 인사이트 포함
 - 양보다 질 우선
   `.trim()
+}
 
+/**
+ * JSON 응답 파싱 (공통)
+ */
+function parseJsonResponse(text: string): GeminiGeneratedContent {
+  // JSON 추출 (```json ... ``` 형식일 수 있음)
+  const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/\{[\s\S]*\}/)
+
+  if (!jsonMatch) {
+    throw new Error('Failed to parse JSON from AI response')
+  }
+
+  const jsonText = jsonMatch[1] || jsonMatch[0]
+  const parsedData = JSON.parse(jsonText)
+
+  // tags가 없으면 기본값 설정
+  if (!parsedData.tags || parsedData.tags.length === 0) {
+    parsedData.tags = ['일반']
+  }
+
+  return parsedData as GeminiGeneratedContent
+}
+
+/**
+ * OpenAI (ChatGPT) 호출
+ */
+async function generateWithOpenAI(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  temperature?: number,
+  maxTokens?: number
+): Promise<GeminiGeneratedContent> {
+  const openai = new OpenAI({ apiKey })
+
+  const completion = await openai.chat.completions.create({
+    model: model || 'gpt-4o',
+    messages: [{ role: 'user', content: prompt }],
+    temperature: temperature ?? 0.7,
+    max_tokens: maxTokens ?? 2000,
+  })
+
+  const text = completion.choices[0]?.message?.content || ''
+  return parseJsonResponse(text)
+}
+
+/**
+ * Google Gemini 호출
+ */
+async function generateWithGemini(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  temperature?: number
+): Promise<GeminiGeneratedContent> {
+  const genAI = new GoogleGenerativeAI(apiKey)
+  const geminiModel = genAI.getGenerativeModel({ model: model || 'gemini-2.5-flash' })
+
+  const result = await geminiModel.generateContent(prompt)
+  const response = await result.response
+  const text = response.text()
+
+  return parseJsonResponse(text)
+}
+
+/**
+ * Anthropic Claude 호출
+ */
+async function generateWithClaude(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  temperature?: number,
+  maxTokens?: number
+): Promise<GeminiGeneratedContent> {
+  const anthropic = new Anthropic({ apiKey })
+
+  const message = await anthropic.messages.create({
+    model: model || 'claude-3-5-sonnet-20241022',
+    max_tokens: maxTokens ?? 2000,
+    temperature: temperature ?? 0.7,
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  const text = message.content[0]?.type === 'text' ? message.content[0].text : ''
+  return parseJsonResponse(text)
+}
+
+/**
+ * 블로그 포스트 생성 (범용 함수)
+ */
+export async function generateBlogPost(
+  topic: string,
+  keywords: string[],
+  marketingContext?: MarketingContext
+): Promise<GeminiGeneratedContent> {
   try {
-    const result = await model.generateContent(prompt)
-    const response = await result.response
-    const text = response.text()
+    const provider = marketingContext?.promptSettings?.provider || 'gemini'
+    const apiKey = marketingContext?.promptSettings?.apiKey
+    const model = marketingContext?.promptSettings?.model || ''
+    const temperature = marketingContext?.promptSettings?.temperature
+    const maxTokens = marketingContext?.promptSettings?.maxTokens
 
-    // JSON 추출 (```json ... ``` 형식일 수 있음)
-    const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/\{[\s\S]*\}/)
-
-    if (!jsonMatch) {
-      throw new Error('Failed to parse JSON from Gemini response')
+    if (!apiKey) {
+      throw new Error(`API key not found for provider: ${provider}`)
     }
 
-    const jsonText = jsonMatch[1] || jsonMatch[0]
-    const parsedData = JSON.parse(jsonText)
+    const prompt = createPrompt(topic, keywords, marketingContext)
 
-    // tags가 없으면 기본값 설정
-    if (!parsedData.tags || parsedData.tags.length === 0) {
-      parsedData.tags = ['일반']
+    console.log(`[AI] Using provider: ${provider}, model: ${model || 'default'}`)
+
+    switch (provider) {
+      case 'openai':
+        return await generateWithOpenAI(apiKey, model, prompt, temperature, maxTokens)
+
+      case 'gemini':
+        return await generateWithGemini(apiKey, model, prompt, temperature)
+
+      case 'claude':
+        return await generateWithClaude(apiKey, model, prompt, temperature, maxTokens)
+
+      default:
+        throw new Error(`Unsupported AI provider: ${provider}`)
     }
-
-    return parsedData as GeminiGeneratedContent
   } catch (error) {
-    console.error('Error generating blog post with Gemini:', error)
+    console.error('Error generating blog post with AI:', error)
     throw error
   }
 }

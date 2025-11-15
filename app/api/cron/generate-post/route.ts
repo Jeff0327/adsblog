@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/utils/supabase/service'
-import { generateBlogPost } from '@/utils/gemini'
+import { generateBlogPost } from '@/utils/ai'
 import { searchImages } from '@/utils/unsplash'
 
 export const dynamic = 'force-dynamic'
@@ -117,9 +117,11 @@ export async function GET(request: NextRequest) {
           brandVoice?: string
         } | null,
         promptSettings: blogSettings.promptSettings as {
+          provider?: 'openai' | 'gemini' | 'claude'
+          apiKey?: string
+          model?: string
           contentPrompt?: string
           seoPrompt?: string
-          model?: string
           temperature?: number
           maxTokens?: number
         } | null,
