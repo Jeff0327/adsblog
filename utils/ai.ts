@@ -200,13 +200,35 @@ export async function generateBlogPost(
 ): Promise<GeminiGeneratedContent> {
   try {
     const provider = marketingContext?.promptSettings?.provider || 'gemini'
-    const apiKey = marketingContext?.promptSettings?.apiKey
-    const model = marketingContext?.promptSettings?.model || ''
     const temperature = marketingContext?.promptSettings?.temperature
     const maxTokens = marketingContext?.promptSettings?.maxTokens
 
+    // API key: promptSettings에서 우선 가져오고, 없으면 환경 변수에서 가져오기
+    let apiKey = marketingContext?.promptSettings?.apiKey
+    let model = marketingContext?.promptSettings?.model || ''
+
     if (!apiKey) {
-      throw new Error(`API key not found for provider: ${provider}`)
+      // 환경 변수에서 기본 API key 가져오기
+      switch (provider) {
+        case 'openai':
+          apiKey = process.env.OPENAI_API_KEY
+          model = model || 'gpt-4o'
+          break
+        case 'gemini':
+          apiKey = process.env.GEMINI_API_KEY
+          model = model || 'gemini-2.0-flash-exp'
+          break
+        case 'claude':
+          apiKey = process.env.ANTHROPIC_API_KEY
+          model = model || 'claude-3-5-sonnet-20241022'
+          break
+        default:
+          throw new Error(`Unsupported AI provider: ${provider}`)
+      }
+    }
+
+    if (!apiKey) {
+      throw new Error(`API key not found for provider: ${provider}. Please set in blog settings or environment variables.`)
     }
 
     const prompt = createPrompt(topic, keywords, marketingContext)
