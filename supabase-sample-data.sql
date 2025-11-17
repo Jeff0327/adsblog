@@ -69,7 +69,6 @@ INSERT INTO posts (
   og_image,
   published,
   published_at,
-  view_count
 )
 VALUES
   (

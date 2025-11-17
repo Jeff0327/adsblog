@@ -1,7 +1,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { getBlogSettings, getPosts } from "./actions"
-import { Calendar, Eye, Clock } from "lucide-react"
+import { Calendar } from "lucide-react"
 import Footer from "@/components/layout/Footer"
 import Header from "@/components/layout/Header"
 
@@ -87,15 +87,6 @@ export default async function Home({ searchParams }: HomeProps) {
                             })}
                           </time>
                         </div>
-                        {featuredPost.view_count !== null && featuredPost.view_count > 0 && (
-                          <>
-                            <span>•</span>
-                            <div className="flex items-center gap-2">
-                              <Clock className="w-4 h-4" />
-                              <span>8 min read</span>
-                            </div>
-                          </>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -161,15 +152,6 @@ export default async function Home({ searchParams }: HomeProps) {
                                 })}
                               </time>
                             </div>
-                            {post.view_count !== null && post.view_count > 0 && (
-                              <>
-                                <span>•</span>
-                                <div className="flex items-center gap-1">
-                                  <Eye className="w-3.5 h-3.5" />
-                                  <span>{post.view_count.toLocaleString()}</span>
-                                </div>
-                              </>
-                            )}
                           </div>
                         </div>
                       </div>

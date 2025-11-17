@@ -51,7 +51,6 @@ CREATE TABLE IF NOT EXISTS posts (
   -- 상태
   published BOOLEAN DEFAULT false,
   published_at TIMESTAMP WITH TIME ZONE,
-  view_count INTEGER DEFAULT 0,
 
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

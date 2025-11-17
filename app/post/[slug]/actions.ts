@@ -20,12 +20,6 @@ export async function getPostBySlug(slug: string): Promise<Post | null> {
     return null
   }
 
-  // 조회수 증가
-  await supabase
-    .from('posts')
-    .update({ view_count: (data.view_count || 0) + 1 })
-    .eq('id', data.id)
-
   return data as Post
 }
 
@@ -69,17 +63,25 @@ export async function getAdjacentPosts(currentPostId: string) {
   }
 }
 
-export async function getRecentPosts(limit: number = 10): Promise<Post[]> {
+export async function getRecentPosts(limit: number = 10, excludeSlug?: string): Promise<Post[]> {
   const supabase = await createClient()
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('posts')
-    .select('id, title, slug, created_at, view_count, og_image')
+    .select('id, title, slug, created_at, og_image')
     .eq('blog_key', BLOG_KEY)  // ⭐ BLOG_KEY 필터링
     .order('created_at', { ascending: false })
     .limit(limit)
 
+  // 현재 포스트 제외
+  if (excludeSlug) {
+    query = query.neq('slug', excludeSlug)
+  }
+
+  const { data, error } = await query
+
   if (error) {
+    console.error('[getRecentPosts] Error:', error)
     return []
   }
 

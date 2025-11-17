@@ -85,9 +85,6 @@ export interface Post {
   seo_keywords: string[] | null
   og_image: string | null
 
-  // 상태
-  view_count: number | null
-
   // 타임스탬프
   created_at: string | null
   updated_at: string | null

@@ -65,7 +65,6 @@
 | `og_image` | text | null | Open Graph 이미지 |
 | `published` | boolean | false | 발행 여부 |
 | `published_at` | timestamptz | null | 발행 시간 |
-| `view_count` | integer | 0 | 조회수 |
 | `created_at` | timestamptz | now() | 생성 시간 |
 | `updated_at` | timestamptz | now() | 수정 시간 |
 

@@ -152,6 +152,46 @@ function parseJsonResponse(text: string): GeminiGeneratedContent {
 }
 
 /**
+ * 재시도 로직 (503, 429 등 일시적 에러)
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  providerName: string = 'AI'
+): Promise<T> {
+  let lastError: Error | unknown
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error: unknown) {
+      lastError = error
+
+      // 재시도 가능한 에러인지 확인
+      const isRetryable =
+        (error instanceof Error && error.message.includes('503')) ||
+        (error instanceof Error && error.message.includes('Service Unavailable')) ||
+        (error instanceof Error && error.message.includes('overloaded')) ||
+        (error instanceof Error && error.message.includes('429')) ||
+        (error instanceof Error && error.message.includes('Too Many Requests'))
+
+      if (!isRetryable || attempt === maxRetries) {
+        throw error
+      }
+
+      // Exponential backoff: 1초, 2초, 4초
+      const delayMs = Math.pow(2, attempt - 1) * 1000
+      console.warn(`[${providerName}] Retry attempt ${attempt}/${maxRetries} after ${delayMs}ms due to:`,
+        error instanceof Error ? error.message : String(error))
+
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+    }
+  }
+
+  throw lastError
+}
+
+/**
  * OpenAI (ChatGPT) 호출
  */
 async function generateWithOpenAI(
@@ -161,17 +201,19 @@ async function generateWithOpenAI(
   temperature?: number,
   maxTokens?: number
 ): Promise<GeminiGeneratedContent> {
-  const openai = new OpenAI({ apiKey })
+  return retryWithBackoff(async () => {
+    const openai = new OpenAI({ apiKey })
 
-  const completion = await openai.chat.completions.create({
-    model: model || 'gpt-4o',
-    messages: [{ role: 'user', content: prompt }],
-    temperature: temperature ?? 0.7,
-    max_tokens: maxTokens ?? 2000,
-  })
+    const completion = await openai.chat.completions.create({
+      model: model || 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: temperature ?? 0.7,
+      max_tokens: maxTokens ?? 2000,
+    })
 
-  const text = completion.choices[0]?.message?.content || ''
-  return parseJsonResponse(text)
+    const text = completion.choices[0]?.message?.content || ''
+    return parseJsonResponse(text)
+  }, 3, 'OpenAI')
 }
 
 /**
@@ -183,14 +225,16 @@ async function generateWithGemini(
   prompt: string,
   temperature?: number
 ): Promise<GeminiGeneratedContent> {
-  const genAI = new GoogleGenerativeAI(apiKey)
-  const geminiModel = genAI.getGenerativeModel({ model: model || 'gemini-2.5-flash' })
+  return retryWithBackoff(async () => {
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const geminiModel = genAI.getGenerativeModel({ model: model || 'gemini-2.5-flash' })
 
-  const result = await geminiModel.generateContent(prompt)
-  const response = await result.response
-  const text = response.text()
+    const result = await geminiModel.generateContent(prompt)
+    const response = await result.response
+    const text = response.text()
 
-  return parseJsonResponse(text)
+    return parseJsonResponse(text)
+  }, 3, 'Gemini')
 }
 
 /**
@@ -203,17 +247,19 @@ async function generateWithClaude(
   temperature?: number,
   maxTokens?: number
 ): Promise<GeminiGeneratedContent> {
-  const anthropic = new Anthropic({ apiKey })
+  return retryWithBackoff(async () => {
+    const anthropic = new Anthropic({ apiKey })
 
-  const message = await anthropic.messages.create({
-    model: model || 'claude-3-5-sonnet-20241022',
-    max_tokens: maxTokens ?? 2000,
-    temperature: temperature ?? 0.7,
-    messages: [{ role: 'user', content: prompt }],
-  })
+    const message = await anthropic.messages.create({
+      model: model || 'claude-3-5-sonnet-20241022',
+      max_tokens: maxTokens ?? 2000,
+      temperature: temperature ?? 0.7,
+      messages: [{ role: 'user', content: prompt }],
+    })
 
-  const text = message.content[0]?.type === 'text' ? message.content[0].text : ''
-  return parseJsonResponse(text)
+    const text = message.content[0]?.type === 'text' ? message.content[0].text : ''
+    return parseJsonResponse(text)
+  }, 3, 'Claude')
 }
 
 /**
@@ -229,51 +275,65 @@ export async function generateBlogPost(
     const provider = marketingContext?.promptSettings?.provider || 'gemini'
     const temperature = marketingContext?.promptSettings?.temperature
     const maxTokens = marketingContext?.promptSettings?.maxTokens
+    const model = marketingContext?.promptSettings?.model || ''
 
-    // API key: promptSettings에서 우선 가져오고, 없으면 환경 변수에서 가져오기
-    let apiKey = marketingContext?.promptSettings?.apiKey
-    let model = marketingContext?.promptSettings?.model || ''
+    // Provider별 API key 및 기본 모델 설정
+    let apiKey: string | undefined
+    let defaultModel = ''
 
-    if (!apiKey) {
-      // 환경 변수에서 기본 API key 가져오기
-      switch (provider) {
-        case 'openai':
-          apiKey = process.env.OPENAI_API_KEY
-          model = model || 'gpt-4o'
-          break
-        case 'gemini':
-          apiKey = process.env.GEMINI_API_KEY
-          model = model || 'gemini-2.0-flash-exp'
-          break
-        case 'claude':
-          apiKey = process.env.ANTHROPIC_API_KEY
-          model = model || 'claude-3-5-sonnet-20241022'
-          break
-        default:
-          throw new Error(`Unsupported AI provider: ${provider}`)
-      }
+    switch (provider) {
+      case 'openai':
+        apiKey = process.env.OPENAI_API_KEY
+        defaultModel = 'gpt-4o'
+        break
+      case 'gemini':
+        apiKey = process.env.GEMINI_API_KEY
+        defaultModel = 'gemini-2.5-flash'
+        break
+      case 'claude':
+        apiKey = process.env.ANTHROPIC_API_KEY
+        defaultModel = 'claude-3-5-sonnet-20241022'
+        break
+      default:
+        throw new Error(`Unsupported AI provider: ${provider}`)
     }
 
     if (!apiKey) {
-      throw new Error(`API key not found for provider: ${provider}. Please set in blog settings or environment variables.`)
+      throw new Error(`API key not found for provider: ${provider}. Please set ${provider.toUpperCase()}_API_KEY in environment variables.`)
+    }
+
+    // Model 호환성 검증 및 기본값 설정
+    let finalModel = model
+
+    if (provider === 'openai' && model && !model.startsWith('gpt') && !model.startsWith('o1')) {
+      console.warn(`[AI] Model '${model}' is not compatible with OpenAI. Using default: ${defaultModel}`)
+      finalModel = defaultModel
+    } else if (provider === 'gemini' && model && !model.startsWith('gemini')) {
+      console.warn(`[AI] Model '${model}' is not compatible with Gemini. Using default: ${defaultModel}`)
+      finalModel = defaultModel
+    } else if (provider === 'claude' && model && !model.startsWith('claude')) {
+      console.warn(`[AI] Model '${model}' is not compatible with Claude. Using default: ${defaultModel}`)
+      finalModel = defaultModel
+    } else if (!model) {
+      finalModel = defaultModel
     }
 
     const prompt = createPrompt(topic, keywords, marketingContext, imageUrls)
 
-    console.log(`[AI] Using provider: ${provider}, model: ${model || 'default'}`)
+    console.log(`[AI] Using provider: ${provider}, model: ${finalModel}`)
     if (imageUrls && imageUrls.length > 0) {
       console.log(`[AI] Using ${imageUrls.length} pre-fetched images in content`)
     }
 
     switch (provider) {
       case 'openai':
-        return await generateWithOpenAI(apiKey, model, prompt, temperature, maxTokens)
+        return await generateWithOpenAI(apiKey, finalModel, prompt, temperature, maxTokens)
 
       case 'gemini':
-        return await generateWithGemini(apiKey, model, prompt, temperature)
+        return await generateWithGemini(apiKey, finalModel, prompt, temperature)
 
       case 'claude':
-        return await generateWithClaude(apiKey, model, prompt, temperature, maxTokens)
+        return await generateWithClaude(apiKey, finalModel, prompt, temperature, maxTokens)
 
       default:
         throw new Error(`Unsupported AI provider: ${provider}`)

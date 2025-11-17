@@ -4,7 +4,9 @@ import { notFound } from "next/navigation"
 import type { Metadata } from "next"
 import { getPostBySlug, getRecentPosts } from "./actions"
 import { getBlogSettings } from "@/app/actions"
-import { Calendar, Eye, ArrowLeft, Clock } from "lucide-react"
+import { Calendar, ArrowLeft } from "lucide-react"
+import Footer from "@/components/layout/Footer"
+import SideContents from "@/components/post/SideContents"
 
 interface PostPageProps {
   params: Promise<{ slug: string }>
@@ -13,6 +15,7 @@ interface PostPageProps {
 export async function generateMetadata({ params }: PostPageProps): Promise<Metadata> {
   const { slug } = await params
   const post = await getPostBySlug(slug)
+
 
   if (!post) {
     return {
@@ -39,12 +42,16 @@ export default async function PostPage({ params }: PostPageProps) {
   const [post, settings, recentPosts] = await Promise.all([
     getPostBySlug(slug),
     getBlogSettings(),
-    getRecentPosts(6)
+    getRecentPosts(20, slug) // 현재 포스트 제외하고 가져오기
   ])
 
   if (!post) {
     notFound()
   }
+
+  // Recent Posts를 두 그룹으로 분리
+  const topRecentPosts = recentPosts.slice(0, 6) // sticky 영역: 상위 6개
+  const moreRecentPosts = recentPosts.slice(6) // 스크롤 영역: 나머지
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -118,15 +125,6 @@ export default async function PostPage({ params }: PostPageProps) {
                       })}
                     </time>
                   </div>
-                  {post.view_count !== null && post.view_count > 0 && (
-                    <>
-                      <span>•</span>
-                      <div className="flex items-center gap-2">
-                        <Eye className="w-4 h-4" />
-                        <span>{post.view_count.toLocaleString()} views</span>
-                      </div>
-                    </>
-                  )}
                 </div>
 
                 {/* Excerpt */}
@@ -183,81 +181,17 @@ export default async function PostPage({ params }: PostPageProps) {
           </article>
 
           {/* Sidebar */}
-          <aside className="lg:w-80 flex-shrink-0">
-            <div className="sticky top-8 space-y-6">
-              {/* Recent Posts */}
-              {recentPosts.length > 0 && (
-                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-                  <h3 className="flex items-center gap-2 text-lg font-bold text-white mb-6">
-                    <Clock className="w-5 h-5 text-blue-400" />
-                    Recent Posts
-                  </h3>
-                  <div className="space-y-4">
-                    {recentPosts.map((recentPost) => (
-                      <Link
-                        key={recentPost.id}
-                        href={`/post/${recentPost.slug}`}
-                        className="block group"
-                      >
-                        <div className="flex gap-3">
-                          {recentPost.og_image && (
-                            <div className="relative w-20 h-20 flex-shrink-0 bg-gray-700 rounded overflow-hidden">
-                              <Image
-                                src={recentPost.og_image}
-                                alt={recentPost.title}
-                                fill
-                                className="object-cover group-hover:scale-110 transition-transform duration-300"
-                                unoptimized
-                              />
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-white group-hover:text-blue-400 transition-colors line-clamp-2 text-sm leading-snug mb-2">
-                              {recentPost.title}
-                            </h4>
-                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                              <Calendar className="w-3 h-3" />
-                              <time dateTime={recentPost.created_at!}>
-                                {new Date(recentPost.created_at!).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                })}
-                              </time>
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
+          <SideContents
+            topRecentPosts={topRecentPosts}
+            moreRecentPosts={moreRecentPosts}
+            settings={settings}
+          />
 
-              {/* Blog Info */}
-              {settings && (
-                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-                  <h3 className="text-lg font-bold text-white mb-3">
-                    {settings.site_title}
-                  </h3>
-                  {settings.site_description && (
-                    <p className="text-sm text-gray-400 leading-relaxed">
-                      {settings.site_description}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </aside>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-900 border-t border-gray-800 mt-20">
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          <p className="text-center text-sm text-gray-500">
-            © {new Date().getFullYear()} {settings?.site_title || 'Blog'}. All rights reserved.
-          </p>
-        </div>
-      </footer>
+      <Footer settings={settings} />
     </div>
   )
 }
