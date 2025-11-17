@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/utils/supabase/service'
 import { generateBlogPost } from '@/utils/ai'
 import { searchImages } from '@/utils/unsplash'
@@ -180,6 +181,16 @@ export async function GET(request: NextRequest) {
       .eq('blog_key', BLOG_KEY)
 
     console.log(`[${BLOG_KEY}] Post created successfully: ${post.id}`)
+
+    // 11. 캐시 무효화 (즉시 반영)
+    try {
+      revalidatePath('/', 'page') // 홈페이지 캐시 무효화
+      revalidatePath(`/post/${slug}`, 'page') // 새 포스트 페이지 캐시 무효화
+      console.log(`[${BLOG_KEY}] Cache invalidated for / and /post/${slug}`)
+    } catch (revalidateError) {
+      console.error(`[${BLOG_KEY}] Cache revalidation failed:`, revalidateError)
+      // 캐시 무효화 실패해도 포스트는 생성되었으므로 계속 진행
+    }
 
     return NextResponse.json({
       success: true,
