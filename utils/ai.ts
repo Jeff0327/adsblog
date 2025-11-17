@@ -33,7 +33,8 @@ interface MarketingContext {
 function createPrompt(
   topic: string,
   keywords: string[],
-  marketingContext?: MarketingContext
+  marketingContext?: MarketingContext,
+  imageUrls?: string[]
 ): string {
   // 마케팅 컨텍스트 구성
   const marketingInfo = marketingContext?.businessName
@@ -63,34 +64,58 @@ ${marketingContext.brandInfo?.uniqueSellingPoints?.length ? `- 차별점: ${mark
   // 커스텀 프롬프트 (promptSettings에서)
   const customPrompt = marketingContext?.promptSettings?.contentPrompt || ''
 
+  // 이미지 관련 안내
+  const imageInstructions = imageUrls && imageUrls.length > 0
+    ? `
+## 사용 가능한 이미지
+다음 이미지들을 콘텐츠 중간에 적절하게 삽입하세요:
+${imageUrls.map((url, idx) => `- 이미지 ${idx + 1}: ${url}`).join('\n')}
+
+⚠️ 이미지 삽입 규칙:
+1. 각 주요 섹션 사이에 이미지를 배치하세요 (섹션을 시각적으로 구분)
+2. 이미지는 다음과 같은 HTML 형식으로 삽입하세요:
+   <figure class="my-8">
+     <img src="이미지URL" alt="설명적인 alt 텍스트" class="w-full rounded-lg shadow-lg" />
+   </figure>
+3. alt 텍스트는 이미지 내용과 관련된 설명적인 한국어로 작성하세요
+4. 최소 ${Math.min(imageUrls.length, 2)}개의 이미지를 콘텐츠에 삽입하세요
+5. 이미지는 콘텐츠 흐름에 자연스럽게 녹아들어야 합니다
+`
+    : `
+## 이미지 정보
+- 이미지는 나중에 자동으로 추가되므로 콘텐츠에 이미지 태그를 삽입하지 마세요
+- Unsplash API용 이미지 검색 키워드 3-5개를 제안해주세요 (영문)
+`
+
   return `
 당신은 전문 블로그 작가입니다. 한국어로 "${topic}"에 대한 포괄적이고 매력적인 블로그 포스트를 작성하세요.
 
 ${marketingInfo}
+${imageInstructions}
 
 요구사항:
 1. SEO 최적화된 주목을 끄는 제목 작성 (최대 60자) - 위의 후킹 기법 필수 사용
 2. 매력적인 요약/발췌문 작성 (최대 160자)
 3. HTML 형식의 본문 작성 (약 800-1200자)
    - 적절한 heading, paragraph, list, 포맷 사용
+   ${imageUrls && imageUrls.length > 0 ? '- 위에 제공된 이미지들을 콘텐츠 중간에 삽입' : ''}
 4. 태그 3-5개 생성 (콘텐츠 분류용, 한글)
 5. SEO 제목 작성 (메인 제목과 다를 수 있음, 검색 최적화)
 6. SEO 설명 작성 (최대 160자)
 7. 키워드 기반 SEO 키워드 5-7개 제안: ${keywords.join(', ')}
-8. Unsplash API용 이미지 검색 키워드 3-5개 제안 (영문)
+${imageUrls && imageUrls.length === 0 ? '8. Unsplash API용 이미지 검색 키워드 3-5개 제안 (영문)' : ''}
 
 ${customPrompt}
 
 출력 형식 (JSON):
 {
   "title": "메인 제목",
-  "content": "<h2>섹션 1</h2><p>내용...</p>",
+  "content": "<h2>섹션 1</h2><p>내용...</p>${imageUrls && imageUrls.length > 0 ? '<figure class=\"my-8\"><img src=\"이미지URL\" alt=\"설명\" class=\"w-full rounded-lg shadow-lg\" /></figure>' : ''}",
   "excerpt": "간단한 요약",
   "tags": ["태그1", "태그2", "태그3"],
   "seo_title": "SEO 최적화 제목",
   "seo_description": "SEO 설명",
-  "seo_keywords": ["키워드1", "키워드2", ...],
-  "image_keywords": ["keyword1", "keyword2", "keyword3"]
+  "seo_keywords": ["키워드1", "키워드2", ...]${imageUrls && imageUrls.length === 0 ? ',\n  "image_keywords": ["keyword1", "keyword2", "keyword3"]' : ''}
 }
 
 중요사항:
@@ -100,6 +125,7 @@ ${customPrompt}
 - 2-3개의 주요 섹션으로 정보성 있고 매력적이며 잘 구조화된 글 작성
 - 실용적인 예시와 실행 가능한 인사이트 포함
 - 양보다 질 우선
+${imageUrls && imageUrls.length > 0 ? '- 제공된 이미지를 반드시 콘텐츠에 삽입하세요' : ''}
   `.trim()
 }
 
@@ -196,7 +222,8 @@ async function generateWithClaude(
 export async function generateBlogPost(
   topic: string,
   keywords: string[],
-  marketingContext?: MarketingContext
+  marketingContext?: MarketingContext,
+  imageUrls?: string[]
 ): Promise<GeminiGeneratedContent> {
   try {
     const provider = marketingContext?.promptSettings?.provider || 'gemini'
@@ -231,9 +258,12 @@ export async function generateBlogPost(
       throw new Error(`API key not found for provider: ${provider}. Please set in blog settings or environment variables.`)
     }
 
-    const prompt = createPrompt(topic, keywords, marketingContext)
+    const prompt = createPrompt(topic, keywords, marketingContext, imageUrls)
 
     console.log(`[AI] Using provider: ${provider}, model: ${model || 'default'}`)
+    if (imageUrls && imageUrls.length > 0) {
+      console.log(`[AI] Using ${imageUrls.length} pre-fetched images in content`)
+    }
 
     switch (provider) {
       case 'openai':

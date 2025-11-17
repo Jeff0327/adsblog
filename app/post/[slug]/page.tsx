@@ -156,8 +156,8 @@ export default async function PostPage({ params }: PostPageProps) {
                   dangerouslySetInnerHTML={{ __html: post.content || '' }}
                 />
 
-                {/* Images Gallery */}
-                {post.images && post.images.length > 0 && (
+                {/* Images Gallery (기존 포스트 호환용 - content에 이미지가 없을 때만 표시) */}
+                {post.images && post.images.length > 0 && !post.content?.includes('<img') && (
                   <div className="mt-12 pt-8 border-t border-gray-700">
                     <h3 className="text-xl font-bold text-white mb-6">Images</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

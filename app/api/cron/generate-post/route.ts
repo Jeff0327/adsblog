@@ -99,7 +99,18 @@ export async function GET(request: NextRequest) {
 
     console.log(`[${BLOG_KEY}] Generating post for topic: "${topic}"`)
 
-    // 6. Gemini로 블로그 글 생성
+    // 6. Unsplash에서 이미지 먼저 검색 (keywords 기반)
+    const imagesPerPost = blogSettings.imagesPerPost || 3
+    console.log(
+      `[${BLOG_KEY}] Searching images with keywords: ${keywords.join(', ')}`
+    )
+
+    const images = await searchImages(keywords as string[], imagesPerPost)
+    const imageUrls = images.map((img) => img.urls.regular)
+
+    console.log(`[${BLOG_KEY}] Found ${imageUrls.length} images`)
+
+    // 7. AI로 블로그 글 생성 (이미지 URL 포함)
     const generatedContent = await generateBlogPost(
       topic,
       keywords as string[],
@@ -125,22 +136,12 @@ export async function GET(request: NextRequest) {
           temperature?: number
           maxTokens?: number
         } | null,
-      }
+      },
+      imageUrls
     )
 
     console.log(`[${BLOG_KEY}] Content generated: "${generatedContent.title}"`)
     console.log(`[${BLOG_KEY}] Tags: ${generatedContent.tags.join(', ')}`)
-
-    // 7. Unsplash에서 이미지 검색
-    const imagesPerPost = blogSettings.imagesPerPost || 3
-    console.log(
-      `[${BLOG_KEY}] Searching images with keywords: ${generatedContent.image_keywords.join(', ')}`
-    )
-
-    const images = await searchImages(generatedContent.image_keywords, imagesPerPost)
-    const imageUrls = images.map((img) => img.urls.regular)
-
-    console.log(`[${BLOG_KEY}] Found ${imageUrls.length} images`)
 
     // 8. Slug 생성 (타임스탬프 기반 고유성 보장)
     const slug = generateSlug(generatedContent.title)

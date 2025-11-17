@@ -2,6 +2,8 @@ import Link from "next/link"
 import Image from "next/image"
 import { getBlogSettings, getPosts } from "./actions"
 import { Calendar, Eye, Clock } from "lucide-react"
+import Footer from "@/components/layout/Footer"
+import Header from "@/components/layout/Header"
 
 interface HomeProps {
   searchParams: Promise<{ page?: string }>
@@ -23,16 +25,7 @@ export default async function Home({ searchParams }: HomeProps) {
   return (
     <div className="min-h-screen bg-gray-900">
       {/* Simple Header - No Menu, No Search */}
-      <header className="bg-gray-900 border-b border-gray-800">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <Link href="/" className="inline-block">
-            <h1 className="text-2xl font-bold text-white hover:text-gray-300 transition-colors">
-              {settings?.site_title || "The Creative Blog"}
-            </h1>
-          </Link>
-        </div>
-      </header>
-
+      <Header settings={settings}/>
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         {posts.length === 0 ? (
@@ -243,13 +236,7 @@ export default async function Home({ searchParams }: HomeProps) {
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-900 border-t border-gray-800 mt-20">
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          <p className="text-center text-sm text-gray-500">
-            © {new Date().getFullYear()} {settings?.site_title || "The Creative Blog"}. All rights reserved.
-          </p>
-        </div>
-      </footer>
+      <Footer settings={settings} />
     </div>
   )
 }
